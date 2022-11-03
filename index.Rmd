@@ -1,0 +1,561 @@
+---
+title: "Sesión 5"
+---
+<center><img src="https://github.com/PoliticayGobiernoPUCP/estadistica_anapol2/raw/master/PICS/LOGO_PUCP.png" width="500"></center>
+
+<center> <header><h1>ESTADISTICA PARA EL ANALISIS POLITICO II</h1>  </header></center>
+
+* Profesor:  <a href="http://www.pucp.edu.pe/profesor/jose-manuel-magallanes/" target="_blank">Dr. José Manuel Magallanes, Ph.D.</a> <br>
+    - Profesor del Departamento de Ciencias Sociales, Sección de Ciencia Política y Gobierno.
+    - [Oficina 105](https://goo.gl/maps/xuGeG6o9di1i1y5m6) - Edificio CISEPA / ECONOMIA / CCSS
+    - Telefono: (51) 1 - 6262000 anexo 4302
+    - Correo Electrónico: [jmagallanes@pucp.edu.pe](mailto:jmagallanes@pucp.edu.pe)
+    
+
+<a id='beginning'></a>
+
+
+____
+
+<center> <header><h2>Análisis de Conglomerados</h2>  </header></center>
+____
+
+
+
+
+# Presentación
+
+
+Traigamos algunos datos de los paises del mundo:
+
+* Índice de Democracia - IDE ([link](https://en.wikipedia.org/wiki/Democracy_Index)).
+* Índice de desarrollo humano - IDH ([link](https://hdr.undp.org/data-center/human-development-index#/indicies/HDI)).
+
+Estos datos, vendrán desde su origen con una serie de problemitas. En el caso del IDE, veamos que viene de esta manera:
+
+```{r}
+rm(list = ls())
+library(htmltab)
+
+# links
+WhereDEMO=list(page="https://en.wikipedia.org/wiki/Democracy_Index",
+               xpath='//*[@id="mw-content-text"]/div[1]/table[6]/tbody')
+demo  = htmltab(doc = WhereDEMO$page, 
+                which  = WhereDEMO$xpath,
+                encoding = "UTF-8")
+library(kableExtra)
+library(magrittr)
+head(demo, 15)%>%kbl()%>%
+  kable_styling(bootstrap_options = "striped", font_size = 10)
+```
+
+En el caso del IDH, veamos que viene de esta manera:
+
+```{r}
+WhereIDH='https://github.com/Estadistica-AnalisisPolitico/DataFiles-estadistica/raw/main/HDR21-22_Statistical_Annex_HDI_Table.xlsx'
+
+#carga
+idh  = rio::import(WhereIDH,skip=4,.name_repair='minimal')
+head(idh, 15)%>%kbl()%>%
+  kable_styling(bootstrap_options = "striped", font_size = 10)
+```
+
+En ambos casos debemos hacer diversas operaciones de selección, renombramiento, y limpieza. Luego de ello, verifiquemos los tipos de datos en IDE:
+
+```{r, message=FALSE, comment=F,}
+#seleccionando columns
+idh=idh[,c(2,3,5,7,9,11)]
+demo=demo[,-c(1,2,6)]
+
+# recombrando columns
+newDemo=c("Pais","RegimeType","Score","Electoral","Functioning","participation","culture",'Civilliberties')
+newIDH=c('Pais','puntuacion','EsperanzaVida','EscolaridadDuracion','EscolaridadPromedio','PBI')
+names(demo)=newDemo
+names(idh)=newIDH
+
+#seleccionando filas
+idh=idh[c(1:202),]
+idh=idh[!is.na(idh$Pais),]
+
+# tipo de datos
+str(demo)
+```
+
+Y para el caso de IDH tenemos:
+```{r}
+str(idh)
+```
+Ambos casos requieren convertir texto a números: 
+
+```{r}
+# formateo: texto a numero
+idh[,-1]=lapply(idh[,-1], as.numeric)
+demo[,3:8]=lapply(demo[,3:8],as.numeric)
+```
+IDH ha generado valores perdidos durante el formateo. Veamos dónde:
+
+```{r}
+idh[!complete.cases(idh[,-1]),]%>%kbl()%>%
+  kable_styling(bootstrap_options = "striped", font_size = 10)
+```
+Podemos comprobar que en efecto esas filas no se usarán. De ahí que podemos eliminarlas:
+```{r}
+idh=idh[complete.cases(idh[,-1]),]
+row.names(idh)=NULL # resetear numero de filas
+```
+
+
+Tenemos dos tablas, con la misma unidad de análisis (_País_). Pasemos a integrarlas en una sola. Como el campo común (la "key") es país, asegurémonos que no haya espacios en blanco en sus alrededores:
+```{r}
+idh$Pais= trimws(idh$Pais,whitespace = "[\\h\\v]")
+demo$Pais= trimws(demo$Pais,whitespace = "[\\h\\v]") 
+
+```
+
+Como queremos integrar ambas, debemos saber qué países tiene en común pero que no están escribiendo igual. Estos son los que no tiene IDE:
+
+```{r}
+sort(setdiff(idh$Pais,demo$Pais))
+```
+Estos son los que no tiene IDH:
+```{r}
+sort(setdiff(demo$Pais,idh$Pais))
+```
+
+Como hay paises que sí están en ambos, pero que no se están escribiendo igual, podemos renombrar esas celdas:
+
+```{r}
+idh[idh$Pais=="Bolivia (Plurinational State of)",'Pais']= "Bolivia"
+idh[idh$Pais=="Cabo Verde",'Pais']= "Cape Verde"
+idh[idh$Pais=="Czechia",'Pais']= "Czech Republic"
+idh[idh$Pais=="Congo (Democratic Republic of the)",'Pais']= "Democratic Republic of the Congo"
+idh[idh$Pais=="Timor-Leste",'Pais']=  "East Timor"
+idh[idh$Pais=="Eswatini (Kingdom of)",'Pais']= "Eswatini"
+idh[idh$Pais=="Hong Kong, China (SAR)",'Pais']= "Hong Kong"
+idh[idh$Pais=="Iran (Islamic Republic of)",'Pais']= "Iran"
+idh[idh$Pais=="Côte d'Ivoire",'Pais']= "Ivory Coast"
+idh[idh$Pais=="Lao People's Democratic Republic" ,'Pais']= "Laos"
+idh[idh$Pais=="Moldova (Republic of)",'Pais']= "Moldova"
+idh[idh$Pais=="Palestine, State of",'Pais']= "Palestine"
+idh[idh$Pais=="Congo",'Pais']= "Republic of the Congo"
+idh[idh$Pais=="Russian Federation",'Pais']=  "Russia"
+idh[idh$Pais=="Korea (Republic of)",'Pais']= "South Korea"
+idh[idh$Pais=="Syrian Arab Republic",'Pais']="Syria"
+idh[idh$Pais=="Tanzania (United Republic of)",'Pais']= "Tanzania"
+idh[idh$Pais=="Türkiye" ,'Pais']= "Turkey"
+idh[idh$Pais=="Venezuela (Bolivarian Republic of)",'Pais']="Venezuela"
+idh[idh$Pais=="Viet Nam" ,'Pais']="Vietnam"
+```
+
+Ahora sí, el **merge** es no perderá tantas filas (países):
+```{r}
+idhdemo=merge(idh,demo)
+```
+
+Verifiquemos el tipo de datos:
+```{r}
+str(idhdemo)
+```
+Para completar el trabajo, demos el formato adecuado a _RegimeType_:
+```{r}
+OrdinalVector=c('Authoritarian','Hybrid regime','Flawed democracy','Full democracy')
+idhdemo$RegimeType=factor(idhdemo$RegimeType,
+                          levels = OrdinalVector,
+                          ordered = T)
+```
+
+
+Ahora, pasemos a describirlos estadísticamente:
+
+```{r}
+summary(idhdemo)
+```
+ 
+Noten que los rangos no son los mismos para los componentes del IDH. Es muy común que tengamos diferentes unidades, por lo que debemos transformar los datos para evitar *confundir* a los algoritmos de conglomeración. Esta es la data original de IDH:
+
+```{r}
+
+boxplot(idhdemo[,c(3:6)],horizontal = F,las=2,cex.axis = 0.5)
+
+```
+Pasemosla a una escala del 0 al 10 (como el IDE):
+
+```{r}
+library(BBmisc)
+boxplot(normalize(idhdemo[,c(3:6)],method='range',range=c(0,10)))
+```
+También podríamos tipificarla:
+
+```{r}
+boxplot(normalize(idhdemo[,c(3:6)],method='standardize'))
+```
+
+
+Nos quedaremos con la segunda opción. Recueda que la tipificación producirá variables con media igual a cero  y desviación típica igual a uno.
+
+```{r}
+idhdemo[,c(3:6)]=normalize(idhdemo[,c(3:6)],method='standardize')
+
+
+#descriptivos:
+summary(idhdemo[,c(3:6)])
+```
+Veamos correlaciones entre estas variables:
+
+```{r}
+cor(idhdemo[,c(3:6)])
+```
+Si hubiera alguna correlación negativa sería bueno invertir la escala, tal que el menor sea el mayor y viceversa. Esto no sucede aquí, por lo que no se hace ningún ajuste. 
+
+# Preparación de los datos para la clusterización
+
+No debemos usar los nombres en la clusterización (columna), pero tampoco debemos perderlos:
+```{r}
+dataClus=idhdemo[,c(3:6)]
+row.names(dataClus)=idhdemo$Pais
+```
+
+Ya con los datos, calculemos las  distancias entre los casos (paises):
+
+```{r}
+
+library(cluster)
+g.dist = daisy(dataClus, metric="gower")
+```
+
+
+
+
+# Procesos de clusterización
+
+Hay diversas estrategías de clusterización. Veremos dos de ellas:
+
+* La técnica de Partición 
+* La técnica de Jerarquización
+    - Jerarquización Aglomerativa
+    - Jerarquización Divisiva
+
+
+
+## Estrategia de Partición
+
+Como su nombre lo indica, la estrategia de partición busca partir los casos en grupos. El algoritmo básico establece puntos que deben atraer a los casos, tal que estos se separen. Claro está, que estos puntos atractores van moviendose conforme los grupos se van formando, hasta que al final se han partido todos los casos. 
+
+Hay diversos algoritmos que buscan una implementación de estos principios básicos. El más conocido es el de **K-medias**, pero para ciencias sociales tiene la desventaja que requiere que todas las variables sean numéricas, no siendo muy adecuado ante categorías. Es decir,  la técnica de *k-means* no usa distancias entre categóricas, sólo entre numéricas ([la distancia _Euclideana_](https://en.wikipedia.org/wiki/Euclidean_distance)).
+
+La alternativa a las necesidades en ciencias sociales es la técnica de **k-medoides**. Esta técnica trabaja muy bien con las distancias euclideas, pero también con otras distancias como la [**Mahattan**](https://en.wikipedia.org/wiki/Taxicab_geometry) (revisar este [debate](https://datascience.stackexchange.com/questions/20075/when-would-one-use-manhattan-distance-as-opposite-to-euclidean-distance)). En particular, usaremos la [distancia Gower](https://www.linkedin.com/pulse/simplifying-gower-coefficient-vineet-tanna) útil para todos los tipos de escalas.
+
+
+
+### Decidir cantidad de clusters:
+
+La siguiente gráficas proponen la cantidad de clusters a solicitar (usando el estadístico _gap_):
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+## para PAM
+
+library(factoextra)
+fviz_nbclust(dataClus, pam,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F)
+```
+
+### Clusterizar via PAM:
+
+```{r}
+set.seed(123)
+res.pam=pam(g.dist,3,cluster.only = F)
+
+#nueva columna
+dataClus$pam=res.pam$cluster
+```
+
+
+### Evaluando el uso de PAM
+
+Si calculamos las _silhouettes_ podemos saber el desempeño del algoritmo:
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+fviz_silhouette(res.pam)
+```
+
+Nótese que hay valores mal clusterizados (silhouettes negativas).
+```{r}
+library(magrittr)
+silPAM=data.frame(res.pam$silinfo$widths)
+silPAM$country=row.names(silPAM)
+poorPAM=silPAM[silPAM$sil_width<0,'country']%>%sort()
+poorPAM
+```
+
+
+### Verificando etiqueta de clusters
+
+Exploremos las caracteísticas estadísticas de cada cluster:
+
+```{r}
+aggregate(.~ pam, data=dataClus,mean)
+```
+
+¿Hay que recodificar la etiqueta del cluster?
+
+```{r}
+original=aggregate(.~ pam, data=dataClus,mean)
+original[order(original$EsperanzaVida),]
+```
+
+Aqui estamos tomando la decisión de NO recodificar.
+
+Antes de continuar, guardemos la columna de PAM en la data integrada.
+```{r}
+idhdemo$pamIDHpoor=idhdemo$Pais%in%poorPAM
+idhdemo$pamIDH=dataClus$pam
+dataClus$pam=NULL
+```
+
+
+
+<a id='beginning'></a>
+
+## Estrategia Jerarquica
+
+La jerarquización busca clusterizar por etapas, hasta que todas las posibilidades de clusterizacion sean visible. Este enfoque tiene dos familias de algoritmos:
+
+* Aglomerativos
+* Divisivos
+
+
+<a id='agg'></a>
+
+## <font color="red">Estrategia Aglomerativa</font>
+
+
+En esta estrategia se parte por considerar cada caso (fila) como un cluster, para de ahi ir creando miniclusters hasta que todos los casos sean un solo cluster. El proceso va mostrando qué tanto _esfuerzo_ toma juntar los elementos cluster tras cluster.
+
+
+### Decidir _linkages_
+
+Aunque se tiene la distancia entre elementos, tenemos que decidir como se irá calculando la distancia entre los clusters que se van formando (ya no son casos individuales). Los tres mas simples metodos:
+
+* Linkage tipo <a href="https://www.youtube.com/embed/RdT7bhm1M3E" target="_blank">SINGLE</a>.
+
+* Linkage tipo <a href="https://www.youtube.com/embed/Cy3ci0Vqs3Y" target="_blank">COMPLETE</a>.
+
+* Linkage tipo <a href="https://www.youtube.com/embed/T1ObCUpjq3o" target="_blank">AVERAGE</a>
+
+
+Otro metodo adicional, y muy eficiente, es el de **Ward**. Al final, lo que necesitamos saber cual de ellos nos entregará una mejor propuesta de clusters. Usemos este último para nuestro caso.
+
+
+### Decidir Cantidad de Clusters
+
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+## PARA JERARQUICO
+
+fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "agnes")
+```
+
+### Clusterizar vía AGNES
+
+La función **hcut** es la que usaremos para el método jerarquico, y el algoritmo aglomerativo se emplea usando **agnes**. El linkage será **ward** (aquí _ward.D_):
+
+```{r, warning=FALSE, message=FALSE, warning=FALSE, message=FALSE}
+set.seed(123)
+library(factoextra)
+
+res.agnes<- hcut(g.dist, k = 3,hc_func='agnes',hc_method = "ward.D")
+
+dataClus$agnes=res.agnes$cluster
+
+```
+
+El **dendograma** nos muestra el proceso de conglomeración:
+
+```{r, warning=FALSE, message=FALSE, warning=FALSE, message=FALSE}
+# Visualize
+fviz_dend(res.agnes, cex = 0.7, horiz = T)
+```
+
+El eje 'Height' nos muestra el "costo" de conglomerar.
+
+
+
+### Evaluando el uso de AGNES
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+fviz_silhouette(res.agnes)
+```
+
+Nótese que hay valores mal clusterizados (silhouettes negativas).
+
+```{r}
+silAGNES=data.frame(res.agnes$silinfo$widths)
+silAGNES$country=row.names(silAGNES)
+poorAGNES=silAGNES[silAGNES$sil_width<0,'country']%>%sort()
+poorAGNES
+```
+### Verificando etiqueta de clusters
+
+
+```{r}
+aggregate(.~ agnes, data=dataClus,mean)
+```
+¿Hay que recodificar la etiqueta del cluster? Tampoco es necesario.
+
+```{r}
+idhdemo$agnesIDHpoor=idhdemo$Pais%in%poorAGNES
+idhdemo$agnesIDH=dataClus$agnes
+dataClus$agnes=NULL
+```
+
+### Comparando
+
+Veamos qué tanto se parece a la clasificación jerarquica a la de partición:
+
+```{r, warning=FALSE, message=FALSE, warning=FALSE, message=FALSE}
+# verificar recodificacion
+table(idhdemo$pamIDH,idhdemo$agnesIDH,dnn = c('Particion','Aglomeracion'))
+```
+
+
+
+## <font color="red">Estrategia Divisiva</font>
+
+
+Esta estrategia comienza con todos los casos como un gran cluster; para de ahi dividir en clusters más pequeños.
+
+### Decidir Cantidad de Clusters
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+## PARA JERARQUICO
+
+fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "diana")
+```
+
+### Clusterizar vía DIANA
+
+
+La función **hcut** es la que usaremos para el método jerarquico, y el algoritmo divisivo se emplea usando **diana**:
+
+
+```{r, warning=FALSE, message=FALSE, warning=FALSE, message=FALSE}
+set.seed(123)
+res.diana <- hcut(g.dist, k = 4,hc_func='diana')
+dataClus$diana=res.diana$cluster
+```
+
+
+
+El **dendograma** nos muestra el proceso de conglomeración:
+
+```{r, warning=FALSE, message=FALSE, warning=FALSE, message=FALSE}
+# Visualize
+fviz_dend(res.diana, cex = 0.7, horiz = T)
+```
+
+### Evaluando el uso de DIANA
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+fviz_silhouette(res.diana)
+```
+```{r}
+silDIANA=data.frame(res.diana$silinfo$widths)
+silDIANA$country=row.names(silDIANA)
+poorDIANA=silDIANA[silDIANA$sil_width<0,'country']%>%sort()
+poorDIANA
+
+```
+
+### Verificando Etiqueta
+
+```{r}
+aggregate(.~ diana, data=dataClus,mean)
+```
+¿Hay que recodificar la etiqueta del cluster?
+
+```{r}
+original=aggregate(.~ diana, data=dataClus,mean)
+original[order(original$EsperanzaVida),]
+```
+
+Esta vez sí:
+
+```{r}
+dataClus$diana=dplyr::recode(dataClus$diana, `1` = 1, `4`=2,`2`=3,`3`=4)
+```
+
+```{r}
+idhdemo$dianaIDHpoor=idhdemo$Pais%in%poorDIANA
+idhdemo$dianaIDH=dataClus$diana
+dataClus$diana=NULL
+```
+
+**Nota** que en estas técnicas (partición y jerarquica) todo elemento termina siendo parte de un cluster.
+
+
+
+
+#### Mapa de casos
+
+Sin embargo, el principal problema es que necesitamos un **mapa de posiciones** para todos los casos. Eso requiere una técnica que _proyecte_ las dimensiones originales en un plano _bidimensional_. Para ello usaremos la técnica llamada **escalamiento multidimensional**:
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+proyeccion = cmdscale(g.dist, k=2,add = T) # k es la cantidad de dimensiones
+```
+
+Habiendo calculado la proyeccción, recuperemos las coordenadas del mapa del mundo basado en nuestras dimensiones nuevas:
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+# data frame prep:
+idhdemo$dim1 <- proyeccion$points[,1]
+idhdemo$dim2 <- proyeccion$points[,2]
+```
+
+Aquí puedes ver el mapa:
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+base= ggplot(idhdemo,aes(x=dim1, y=dim2,label=row.names(dataClus))) 
+base + geom_text(size=2)
+
+```
+
+Coloreemos el mapa anterior segun el cluster al que corresponden. 
+
+Procedeamos a gráficar:
+
+* PAM
+
+```{r, warning=FALSE, message=FALSE}
+PAMlabels=ifelse(idhdemo$pamIDHpoor,idhdemo$Pais,'')
+base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
+pamPlot=base + geom_point(size=2, aes(color=as.factor(pamIDH)))  + labs(title = "PAM") 
+pamPlot + geom_text(size=3, aes(label=PAMlabels))
+```
+
+* AGNES
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+
+AGNESlabels=ifelse(idhdemo$agnesIDHpoor,idhdemo$Pais,'')
+base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
+agnesPlot=base + geom_point(size=2, aes(color=as.factor(agnesIDH))) + labs(title = "AGNES") 
+agnesPlot + geom_text(size=3, aes(label=AGNESlabels))
+
+
+
+```
+
+* DIANA
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+DIANAlabels=ifelse(idhdemo$dianaIDHpoor,idhdemo$Pais,'')
+base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
+dianaPlot=base + geom_point(size=2, aes(color=as.factor(dianaIDH))) + labs(title = "DIANA")
+dianaPlot + geom_text(size=3, aes(label=DIANAlabels))
+
+
+
+
+
+```
+
+
+
