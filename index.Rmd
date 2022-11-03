@@ -1,6 +1,13 @@
 ---
-title: "Sesión 5"
+title: "Sesión 7"
+output:
+  bookdown::html_document2:
+    code_folding: hide 
+    toc: true
+    toc_float: true
+#bibliography: references.bib
 ---
+
 <center><img src="https://github.com/PoliticayGobiernoPUCP/estadistica_anapol2/raw/master/PICS/LOGO_PUCP.png" width="500"></center>
 
 <center> <header><h1>ESTADISTICA PARA EL ANALISIS POLITICO II</h1>  </header></center>
@@ -25,8 +32,9 @@ ____
 
 # Presentación
 
+La idea intuitiva de conglomerar es poder organizar los casos (filas) en subconjuntos o grupos, tal que la similitud entre casos justifique que pertenezca a un grupo y no a otro.
 
-Traigamos algunos datos de los paises del mundo:
+Traigamos algunos datos de los paises del mundo para el ejemplo de esta sesión:
 
 * Índice de Democracia - IDE ([link](https://en.wikipedia.org/wiki/Democracy_Index)).
 * Índice de desarrollo humano - IDH ([link](https://hdr.undp.org/data-center/human-development-index#/indicies/HDI)).
@@ -60,6 +68,8 @@ head(idh, 15)%>%kbl()%>%
   kable_styling(bootstrap_options = "striped", font_size = 10)
 ```
 
+## Selección
+
 En ambos casos debemos hacer diversas operaciones de selección, renombramiento, y limpieza. Luego de ello, verifiquemos los tipos de datos en IDE:
 
 ```{r, message=FALSE, comment=F,}
@@ -81,29 +91,47 @@ idh=idh[!is.na(idh$Pais),]
 str(demo)
 ```
 
-Y para el caso de IDH tenemos:
+Y para el caso de IDH tenemos estos tipos de datos:
+
 ```{r}
 str(idh)
 ```
-Ambos casos requieren convertir texto a números: 
+
+## Formateo
+
+Ambos casos requieren convertir texto a números, y una variable de texto a ordinal: 
 
 ```{r}
 # formateo: texto a numero
 idh[,-1]=lapply(idh[,-1], as.numeric)
 demo[,3:8]=lapply(demo[,3:8],as.numeric)
+
+# formateo: texto a ordinal
+OrdinalVector=c('Authoritarian','Hybrid regime','Flawed democracy','Full democracy')
+demo$RegimeType=factor(demo$RegimeType,
+                          levels = OrdinalVector,
+                          ordered = T)
 ```
+
+
+
+## Valores perdidos
+
 IDH ha generado valores perdidos durante el formateo. Veamos dónde:
 
 ```{r}
 idh[!complete.cases(idh[,-1]),]%>%kbl()%>%
   kable_styling(bootstrap_options = "striped", font_size = 10)
 ```
-Podemos comprobar que en efecto esas filas no se usarán. De ahí que podemos eliminarlas:
+
+Podemos comprobar que en efecto esas filas no se usarán. De ahí que podemos eliminar esas filas.
+
 ```{r}
 idh=idh[complete.cases(idh[,-1]),]
 row.names(idh)=NULL # resetear numero de filas
 ```
 
+## Merging
 
 Tenemos dos tablas, con la misma unidad de análisis (_País_). Pasemos a integrarlas en una sola. Como el campo común (la "key") es país, asegurémonos que no haya espacios en blanco en sus alrededores:
 ```{r}
@@ -147,7 +175,7 @@ idh[idh$Pais=="Venezuela (Bolivarian Republic of)",'Pais']="Venezuela"
 idh[idh$Pais=="Viet Nam" ,'Pais']="Vietnam"
 ```
 
-Ahora sí, el **merge** es no perderá tantas filas (países):
+Ahora sí, el **merge** no perderá tantas filas (países):
 ```{r}
 idhdemo=merge(idh,demo)
 ```
@@ -156,14 +184,8 @@ Verifiquemos el tipo de datos:
 ```{r}
 str(idhdemo)
 ```
-Para completar el trabajo, demos el formato adecuado a _RegimeType_:
-```{r}
-OrdinalVector=c('Authoritarian','Hybrid regime','Flawed democracy','Full democracy')
-idhdemo$RegimeType=factor(idhdemo$RegimeType,
-                          levels = OrdinalVector,
-                          ordered = T)
-```
 
+## Exploración de datos
 
 Ahora, pasemos a describirlos estadísticamente:
 
@@ -171,7 +193,11 @@ Ahora, pasemos a describirlos estadísticamente:
 summary(idhdemo)
 ```
  
-Noten que los rangos no son los mismos para los componentes del IDH. Es muy común que tengamos diferentes unidades, por lo que debemos transformar los datos para evitar *confundir* a los algoritmos de conglomeración. Esta es la data original de IDH:
+Noten que los rangos no son los mismos para los componentes del IDH. Es muy común que tengamos diferentes unidades, por lo que debemos transformar los datos para evitar *confundir* a los algoritmos de conglomeración. 
+
+## Transformación  de datos
+
+Esta es la data original de IDH:
 
 ```{r}
 
@@ -184,6 +210,7 @@ Pasemosla a una escala del 0 al 10 (como el IDE):
 library(BBmisc)
 boxplot(normalize(idhdemo[,c(3:6)],method='range',range=c(0,10)))
 ```
+
 También podríamos tipificarla:
 
 ```{r}
@@ -200,12 +227,16 @@ idhdemo[,c(3:6)]=normalize(idhdemo[,c(3:6)],method='standardize')
 #descriptivos:
 summary(idhdemo[,c(3:6)])
 ```
+
+## Correlación
+
 Veamos correlaciones entre estas variables:
 
 ```{r}
 cor(idhdemo[,c(3:6)])
 ```
 Si hubiera alguna correlación negativa sería bueno invertir la escala, tal que el menor sea el mayor y viceversa. Esto no sucede aquí, por lo que no se hace ningún ajuste. 
+
 
 # Preparación de los datos para la clusterización
 
@@ -236,8 +267,7 @@ Hay diversas estrategías de clusterización. Veremos dos de ellas:
     - Jerarquización Divisiva
 
 
-
-## Estrategia de Partición
+## <font color="red">Estrategia de Partición</font>
 
 Como su nombre lo indica, la estrategia de partición busca partir los casos en grupos. El algoritmo básico establece puntos que deben atraer a los casos, tal que estos se separen. Claro está, que estos puntos atractores van moviendose conforme los grupos se van formando, hasta que al final se han partido todos los casos. 
 
@@ -289,7 +319,7 @@ poorPAM
 
 ### Verificando etiqueta de clusters
 
-Exploremos las caracteísticas estadísticas de cada cluster:
+Exploremos las características estadísticas de cada cluster:
 
 ```{r}
 aggregate(.~ pam, data=dataClus,mean)
@@ -325,13 +355,13 @@ La jerarquización busca clusterizar por etapas, hasta que todas las posibilidad
 
 <a id='agg'></a>
 
-## <font color="red">Estrategia Aglomerativa</font>
+### <font color="red">Estrategia Aglomerativa</font>
 
 
 En esta estrategia se parte por considerar cada caso (fila) como un cluster, para de ahi ir creando miniclusters hasta que todos los casos sean un solo cluster. El proceso va mostrando qué tanto _esfuerzo_ toma juntar los elementos cluster tras cluster.
 
 
-### Decidir _linkages_
+#### Decidir _linkages_
 
 Aunque se tiene la distancia entre elementos, tenemos que decidir como se irá calculando la distancia entre los clusters que se van formando (ya no son casos individuales). Los tres mas simples metodos:
 
@@ -345,7 +375,7 @@ Aunque se tiene la distancia entre elementos, tenemos que decidir como se irá c
 Otro metodo adicional, y muy eficiente, es el de **Ward**. Al final, lo que necesitamos saber cual de ellos nos entregará una mejor propuesta de clusters. Usemos este último para nuestro caso.
 
 
-### Decidir Cantidad de Clusters
+#### Decidir Cantidad de Clusters
 
 
 ```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
@@ -354,7 +384,7 @@ Otro metodo adicional, y muy eficiente, es el de **Ward**. Al final, lo que nece
 fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "agnes")
 ```
 
-### Clusterizar vía AGNES
+#### Clusterizar vía AGNES
 
 La función **hcut** es la que usaremos para el método jerarquico, y el algoritmo aglomerativo se emplea usando **agnes**. El linkage será **ward** (aquí _ward.D_):
 
@@ -379,7 +409,7 @@ El eje 'Height' nos muestra el "costo" de conglomerar.
 
 
 
-### Evaluando el uso de AGNES
+#### Evaluando el uso de AGNES
 
 ```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
 fviz_silhouette(res.agnes)
@@ -393,7 +423,8 @@ silAGNES$country=row.names(silAGNES)
 poorAGNES=silAGNES[silAGNES$sil_width<0,'country']%>%sort()
 poorAGNES
 ```
-### Verificando etiqueta de clusters
+
+#### Verificando etiqueta de clusters
 
 
 ```{r}
@@ -407,7 +438,7 @@ idhdemo$agnesIDH=dataClus$agnes
 dataClus$agnes=NULL
 ```
 
-### Comparando
+#### Comparando
 
 Veamos qué tanto se parece a la clasificación jerarquica a la de partición:
 
@@ -418,12 +449,12 @@ table(idhdemo$pamIDH,idhdemo$agnesIDH,dnn = c('Particion','Aglomeracion'))
 
 
 
-## <font color="red">Estrategia Divisiva</font>
+### <font color="red">Estrategia Divisiva</font>
 
 
 Esta estrategia comienza con todos los casos como un gran cluster; para de ahi dividir en clusters más pequeños.
 
-### Decidir Cantidad de Clusters
+#### Decidir Cantidad de Clusters
 
 ```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
 ## PARA JERARQUICO
@@ -431,7 +462,7 @@ Esta estrategia comienza con todos los casos como un gran cluster; para de ahi d
 fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "diana")
 ```
 
-### Clusterizar vía DIANA
+#### Clusterizar vía DIANA
 
 
 La función **hcut** es la que usaremos para el método jerarquico, y el algoritmo divisivo se emplea usando **diana**:
@@ -452,7 +483,7 @@ El **dendograma** nos muestra el proceso de conglomeración:
 fviz_dend(res.diana, cex = 0.7, horiz = T)
 ```
 
-### Evaluando el uso de DIANA
+#### Evaluando el uso de DIANA
 
 ```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
 fviz_silhouette(res.diana)
@@ -465,7 +496,7 @@ poorDIANA
 
 ```
 
-### Verificando Etiqueta
+#### Verificando Etiqueta
 
 ```{r}
 aggregate(.~ diana, data=dataClus,mean)
@@ -494,7 +525,7 @@ dataClus$diana=NULL
 
 
 
-#### Mapa de casos
+# Visualización comparativa
 
 Sin embargo, el principal problema es que necesitamos un **mapa de posiciones** para todos los casos. Eso requiere una técnica que _proyecte_ las dimensiones originales en un plano _bidimensional_. Para ello usaremos la técnica llamada **escalamiento multidimensional**:
 
@@ -511,9 +542,10 @@ idhdemo$dim2 <- proyeccion$points[,2]
 ```
 
 Aquí puedes ver el mapa:
-```{r, warning=FALSE, message=FALSE, eval=TRUE}
+```{r, warning=FALSE, message=FALSE, eval=TRUE,fig.height=6}
+library(ggrepel)
 base= ggplot(idhdemo,aes(x=dim1, y=dim2,label=row.names(dataClus))) 
-base + geom_text(size=2)
+base + geom_text_repel(size=3, max.overlaps = 50,min.segment.length = unit(0, 'lines'))
 
 ```
 
@@ -523,21 +555,22 @@ Procedeamos a gráficar:
 
 * PAM
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE,fig.height=6}
+
 PAMlabels=ifelse(idhdemo$pamIDHpoor,idhdemo$Pais,'')
 base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
 pamPlot=base + geom_point(size=2, aes(color=as.factor(pamIDH)))  + labs(title = "PAM") 
-pamPlot + geom_text(size=3, aes(label=PAMlabels))
+pamPlot + geom_text_repel(size=4, aes(label=PAMlabels), max.overlaps = 50,min.segment.length = unit(0, 'lines'))
 ```
 
 * AGNES
 
-```{r, warning=FALSE, message=FALSE, eval=TRUE}
+```{r, warning=FALSE, message=FALSE, eval=TRUE,fig.height=6}
 
 AGNESlabels=ifelse(idhdemo$agnesIDHpoor,idhdemo$Pais,'')
 base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
 agnesPlot=base + geom_point(size=2, aes(color=as.factor(agnesIDH))) + labs(title = "AGNES") 
-agnesPlot + geom_text(size=3, aes(label=AGNESlabels))
+agnesPlot + geom_text_repel(size=4, aes(label=AGNESlabels),min.segment.length = unit(0, 'lines'))
 
 
 
@@ -545,11 +578,11 @@ agnesPlot + geom_text(size=3, aes(label=AGNESlabels))
 
 * DIANA
 
-```{r, warning=FALSE, message=FALSE, eval=TRUE}
+```{r, warning=FALSE, message=FALSE, eval=TRUE,fig.height=6}
 DIANAlabels=ifelse(idhdemo$dianaIDHpoor,idhdemo$Pais,'')
 base= ggplot(idhdemo,aes(x=dim1, y=dim2)) +  coord_fixed()
 dianaPlot=base + geom_point(size=2, aes(color=as.factor(dianaIDH))) + labs(title = "DIANA")
-dianaPlot + geom_text(size=3, aes(label=DIANAlabels))
+dianaPlot + geom_text_repel(size=4,aes(label=DIANAlabels), max.overlaps = 50,min.segment.length = unit(0, 'lines'))
 
 
 
