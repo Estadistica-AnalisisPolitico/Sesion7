@@ -53,12 +53,12 @@ library(htmltab)
 # links
 WhereDEMO=list(page="https://en.wikipedia.org/wiki/Democracy_Index",
                xpath='//*[@id="mw-content-text"]/div[1]/table[6]/tbody')
-demo  = htmltab(doc = WhereDEMO$page, 
+demoX  = htmltab(doc = WhereDEMO$page, 
                 which  = WhereDEMO$xpath,
                 encoding = "UTF-8")
 library(kableExtra)
 library(magrittr)
-head(demo, 15)%>%kbl()%>%
+head(demoX, 15)%>%kbl()%>%
   kable_styling(bootstrap_options = "striped", font_size = 10)
 ```
 
@@ -68,8 +68,8 @@ En el caso del IDH, veamos que viene de esta manera:
 WhereIDH='https://github.com/Estadistica-AnalisisPolitico/DataFiles-estadistica/raw/main/HDR21-22_Statistical_Annex_HDI_Table.xlsx'
 
 #carga
-idh  = rio::import(WhereIDH,skip=4,.name_repair='minimal')
-head(idh, 15)%>%kbl()%>%
+idhX  = rio::import(WhereIDH,skip=4,.name_repair='minimal')
+head(idhX, 15)%>%kbl()%>%
   kable_styling(bootstrap_options = "striped", font_size = 10)
 ```
 
@@ -79,10 +79,10 @@ En ambas tablas debemos hacer diversas operaciones de selección, renombramiento
 
 ```{r, message=FALSE, comment=F,}
 #seleccionando columns
-idh=idh[,c(2,3,5,7,9,11)]
-demo=demo[,-c(1,2,6)]
+idh=idhX[,c(2,3,5,7,9,11)]
+demo=demoX[,-c(1,2,6)]
 
-# recombrando columns
+# renombrando columnas
 newDemo=c("Pais","RegimeType","Score","Electoral","Functioning","participation","culture",'Civilliberties')
 newIDH=c('Pais','puntuacion','EsperanzaVida','EscolaridadDuracion','EscolaridadPromedio','PBI')
 names(demo)=newDemo
