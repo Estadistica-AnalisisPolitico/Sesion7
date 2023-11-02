@@ -39,174 +39,25 @@ ____
 
 La idea intuitiva de conglomerar es poder organizar los casos (filas) en subconjuntos o grupos, tal que la similitud entre casos justifique que pertenezca a un grupo y no a otro.
 
+En la sesión [anterior](https://estadistica-analisispolitico.github.io/Sesion6/), vimos como crear un índice numérico que resuma indicadores de un concepto. Utilicemos los datos ahí preprocesados:
+
 Traigamos algunos datos de los paises del mundo para el ejemplo de esta sesión:
-
-* Índice de Democracia - IDE ([link](https://en.wikipedia.org/wiki/Democracy_Index)).
-* Índice de desarrollo humano - IDH ([link](https://hdr.undp.org/data-center/human-development-index#/indicies/HDI)).
-
-Estos datos, vendrán desde su origen con una serie de problemitas. En el caso del IDE, veamos que viene de esta manera:
-
 ```{r}
 rm(list = ls())
-library(htmltab)
 
-# links
-WhereDEMO=list(page="https://en.wikipedia.org/wiki/Democracy_Index",
-               xpath='//*[@id="mw-content-text"]/div[1]/table[6]/tbody')
-demoX  = htmltab(doc = WhereDEMO$page, 
-                which  = WhereDEMO$xpath,
-                encoding = "UTF-8")
-library(kableExtra)
-library(magrittr)
-head(demoX, 15)%>%kbl()%>%
-  kable_styling(bootstrap_options = "striped", font_size = 10)
+link_idhdemo="https://docs.google.com/spreadsheets/d/e/2PACX-1vRB4YNe2KdIrTmQUAMScYuWcA2ig8d5fKgJBQIlRPVKcryiurAY3dz4Dy8-fpa_MjqmPeTeYet1ggDR/pub?gid=1870508685&single=true&output=csv"
+
+idhdemo=read.csv(link_idhdemo)
+names(idhdemo)
 ```
 
-En el caso del IDH, veamos que viene de esta manera:
-
-```{r}
-WhereIDH='https://github.com/Estadistica-AnalisisPolitico/DataFiles-estadistica/raw/main/HDR21-22_Statistical_Annex_HDI_Table.xlsx'
-
-#carga
-idhX  = rio::import(WhereIDH,skip=4,.name_repair='minimal')
-head(idhX, 15)%>%kbl()%>%
-  kable_styling(bootstrap_options = "striped", font_size = 10)
-```
-
-## Selección
-
-En ambas tablas debemos hacer diversas operaciones de selección, renombramiento, y limpieza. Luego de ello, verifiquemos los tipos de datos en IDE:
-
-```{r, message=FALSE, comment=F,}
-#seleccionando columns
-idh=idhX[,c(2,3,5,7,9,11)]
-demo=demoX[,-c(1,2,6)]
-
-# renombrando columnas
-newDemo=c("Pais","RegimeType","Score","Electoral","Functioning","participation","culture",'Civilliberties')
-newIDH=c('Pais','puntuacion','EsperanzaVida','EscolaridadDuracion','EscolaridadPromedio','PBI')
-names(demo)=newDemo
-names(idh)=newIDH
-
-#seleccionando filas
-idh=idh[c(1:202),]
-idh=idh[!is.na(idh$Pais),]
-
-# tipo de datos
-str(demo)
-```
-
-Y para el caso de IDH tenemos estos tipos de datos:
-
-```{r}
-str(idh)
-```
-
-## Formateo
-
-Ambas tablas requieren convertir columnas de tipo texto a numérico, y una columns de tipo texto a categórica ordinal. Muchas veces, esta etapa de formateo produce valores perdidos, cuando algun valor no puede transformarse al tipo de dato requerido. La data de IDH tuvo ese problema, y el warning se muestra así (un warning cada vez que no se pudo transformar):
-
-```{r}
-# formateo: texto a ordinal
-OrdinalVector=c('Authoritarian','Hybrid regime','Flawed democracy','Full democracy')
-demo$RegimeType=factor(demo$RegimeType,
-                          levels = OrdinalVector,
-                          ordered = T)
-
-# formateo: texto a numero
-idh[,-1]=lapply(idh[,-1], as.numeric)
-demo[,3:8]=lapply(demo[,3:8],as.numeric)
-
-
-```
-
-
-
-## Valores perdidos
-
-Sabemos que IDH ha generado valores perdidos durante el formateo. Es importante saber si podemos recuperar alguno de ellos. Veamos dónde tenemos estos valores perdidos (**NA*s):
-
-```{r}
-idh[!complete.cases(idh[,-1]),]%>%kbl()%>%
-  kable_styling(bootstrap_options = "striped", font_size = 10)
-```
-
-Podemos comprobar que en efecto esas filas no se usarán. De ahí que podemos eliminar esas filas.
-
-```{r}
-idh=idh[complete.cases(idh[,-1]),]
-row.names(idh)=NULL # resetear numero de filas
-```
-
-## Merging
-
-Tenemos dos tablas, con la misma unidad de análisis (_Pais_). Pasemos a integrarlas en una sola. Como el campo común (la "key") es __Pais__, asegurémonos que no haya espacios en blanco en sus alrededores.
-```{r}
-idh$Pais= trimws(idh$Pais,whitespace = "[\\h\\v]")
-demo$Pais= trimws(demo$Pais,whitespace = "[\\h\\v]") 
-
-```
-
-Como queremos integrar ambas, debemos investigar si hay países tiene en común pero que se han escrito diferente en cada tabla. Estos son los que no tiene IDE:
-
-```{r}
-sort(setdiff(idh$Pais,demo$Pais))
-```
-
-Estos son los que no tiene IDH:
-```{r}
-sort(setdiff(demo$Pais,idh$Pais))
-```
-
-Como hay paises que sí están en ambos, pero que no se están escribiendo igual, podemos renombrar esas celdas. Aquí no será un proceso automático, pero podría serlo.
-
-```{r}
-idh[idh$Pais=="Bolivia (Plurinational State of)",'Pais']= "Bolivia"
-idh[idh$Pais=="Cabo Verde",'Pais']= "Cape Verde"
-idh[idh$Pais=="Czechia",'Pais']= "Czech Republic"
-idh[idh$Pais=="Congo (Democratic Republic of the)",'Pais']= "Democratic Republic of the Congo"
-idh[idh$Pais=="Timor-Leste",'Pais']=  "East Timor"
-idh[idh$Pais=="Eswatini (Kingdom of)",'Pais']= "Eswatini"
-idh[idh$Pais=="Hong Kong, China (SAR)",'Pais']= "Hong Kong"
-idh[idh$Pais=="Iran (Islamic Republic of)",'Pais']= "Iran"
-idh[idh$Pais=="Côte d'Ivoire",'Pais']= "Ivory Coast"
-idh[idh$Pais=="Lao People's Democratic Republic" ,'Pais']= "Laos"
-idh[idh$Pais=="Moldova (Republic of)",'Pais']= "Moldova"
-idh[idh$Pais=="Palestine, State of",'Pais']= "Palestine"
-idh[idh$Pais=="Congo",'Pais']= "Republic of the Congo"
-idh[idh$Pais=="Russian Federation",'Pais']=  "Russia"
-idh[idh$Pais=="Korea (Republic of)",'Pais']= "South Korea"
-idh[idh$Pais=="Syrian Arab Republic",'Pais']="Syria"
-idh[idh$Pais=="Tanzania (United Republic of)",'Pais']= "Tanzania"
-idh[idh$Pais=="Türkiye" ,'Pais']= "Turkey"
-idh[idh$Pais=="Venezuela (Bolivarian Republic of)",'Pais']="Venezuela"
-idh[idh$Pais=="Viet Nam" ,'Pais']="Vietnam"
-```
-
-Ahora sí, el **merge** no perderá tantas filas (países).
-```{r}
-idhdemo=merge(idh,demo)
-```
-
-Si los tipos de datos se corrigieron antes, eso sería todo el proceso para producir una tabla integrada.
-
-## Exploración de datos
-
-Ahora, pasemos a describirlos estadísticamente:
-
-```{r}
-summary(idhdemo)
-```
- 
-Noten que los rangos no son los mismos para los componentes del IDH. Es muy común que tengamos diferentes unidades, por lo que debemos transformar los datos para evitar *confundir* a los algoritmos de conglomeración. 
-
-## Transformación  de datos
+# Transformación  de datos
 
 Para este ejercicio sólo usaremos los componentes del IDH. La distribución de los componentes del IDH podemos verla en la Figura \@ref(fig:boxdemoOrig).
 
 ```{r boxdemoOrig, fig.cap="Distribución de los componentes del IDH"}
 
-boxplot(idhdemo[,c(3:6)],horizontal = F,las=2,cex.axis = 0.5)
+boxplot(idhdemo[,c(4:7)],horizontal = F,las=2,cex.axis = 0.5)
 
 ```
 
@@ -215,28 +66,28 @@ Como primera estrategia cambiemos sus rangos. Elijamos un rango  del 0 al 1, cuy
 ```{r boxdemoRango,fig.cap="Distribución de los componentes del IDH con nuevo rango (0-1)"}
 
 library(BBmisc)
-boxplot(normalize(idhdemo[,c(3:6)],method='range',range=c(0,10)))
+boxplot(normalize(idhdemo[,c(4:7)],method='range',range=c(0,10)))
 ```
 
 Una segunda estrategia sería tipificarla ^[Recuerda que la tipificación producirá variables con media igual a cero  y desviación típica igual a uno.]. El resultado se muestra en la Figura \@ref(fig:boxdemoZ).
 
 ```{r boxdemoZ,fig.cap="Distribución de los componentes del IDH tipificados"}
-boxplot(normalize(idhdemo[,c(3:6)],method='standardize'))
+boxplot(normalize(idhdemo[,c(4:7)],method='standardize'))
 ```
 
 
 Nos quedaremos con la segunda opción. 
 
 ```{r}
-idhdemo[,c(3:6)]=normalize(idhdemo[,c(3:6)],method='standardize')
+idhdemo[,c(4:7)]=normalize(idhdemo[,c(4:7)],method='standardize')
 ```
 
-## Correlación
+# Correlación
 
 Veamos correlaciones entre estas variables tipificadas:
 
 ```{r}
-cor(idhdemo[,c(3:6)])
+cor(idhdemo[,c(4:7)])
 ```
 
 Si hubiera alguna correlación negativa sería bueno invertir el rango, tal que el menor sea el mayor y viceversa. Esto no sucede aquí, por lo que no se hace ningún ajuste. 
@@ -247,8 +98,8 @@ Si hubiera alguna correlación negativa sería bueno invertir el rango, tal que 
 No podemos usar la columna _Pais_ en la clusterización, pero tampoco debemos perderla, por lo que se recomienda usar esos nombres en lugar del nombre de fila.
 
 ```{r}
-dataClus=idhdemo[,c(3:6)]
-row.names(dataClus)=idhdemo$Pais
+dataClus=idhdemo[,c(4:7)]
+row.names(dataClus)=idhdemo$country
 ```
 
 Ya con los datos en el objeto _dataClus_, calculemos la **matriz de  distancias** entre los casos (paises):
@@ -263,7 +114,7 @@ Hay diversas maneras de calculas matrices de distancias entre casos. Cuando las 
 
 # Procesos de clusterización
 
-Hay diversas estrategías de clusterización. Veremos dos de ellas:
+Hay diversas estrategías de clusterización. Veremos dos de ellas en nuestro curso:
 
 * La técnica de Partición 
 * La técnica de Jerarquización
@@ -273,10 +124,9 @@ Hay diversas estrategías de clusterización. Veremos dos de ellas:
 
 ## <font color="blue">Estrategia de Partición</font>
 
-Como su nombre lo indica, la estrategia de partición busca partir los casos en grupos. El algoritmo básico establece puntos que deben atraer a los casos, tal que estos se separen. Claro está, que estos puntos atractores van moviendose conforme los grupos se van formando, hasta que al final se han partido todos los casos. 
+Como su nombre lo indica, la estrategia de partición busca partir los casos en grupos. El algoritmo básico establece puntos que traten de ser el centro de los demás casos, tal que estos se separen. Claro está, que estos centros de atracción van moviéndose conforme los grupos se van formando, hasta que al final se han partido todos los casos. 
 
-Hay diversos algoritmos que buscan una implementación de estos principios básicos. El más conocido es el de **K-medias**, pero para ciencias sociales tiene la desventaja que requiere que todas las variables sean numéricas, no siendo muy adecuado ante categorías. 
-La alternativa a las necesidades en ciencias sociales es la técnica de **k-medoides**. 
+Hay diversos algoritmos que buscan una implementación de estos principios básicos. El más conocido es el de **K-medias**, pero para ciencias sociales tiene la desventaja que requiere que todas las variables sean numéricas, no siendo muy adecuado cuando haya presencia de  variables sean categóricas. La alternativa a las necesidades en ciencias sociales es la técnica de **k-medoides**. 
 
 
 ### Decidir cantidad de clusters:
@@ -297,6 +147,7 @@ fviz_nbclust(dataClus, pam,diss=g.dist,method = "gap_stat",k.max = 10,verbose = 
 La técnica de k-medoides se implementa en la función _pam_. Esta función retorna diversos valores, en este caso crearemos una columna con la etiqueta del cluster. Usemos la sugerencia de la  Figura \@ref(fig:gapPam), y hallamos:
 
 ```{r}
+library(kableExtra)
 set.seed(123)
 res.pam=pam(g.dist,3,cluster.only = F)
 
@@ -317,6 +168,7 @@ Una manera práctica de ver el desempeño del algoritmo es calcular las _silhoue
 fviz_silhouette(res.pam,print.summary = F)
 ```
 La Figura \@ref(fig:silsPam) muestra barras, donde cada una es un país (caso). Mientras más alta la barra, la pertenencia a ese cluster es clara. La barra negativa indica un país mal clusterizado. Para este caso, estos serían los mal clusterizados:
+
 ```{r}
 silPAM=data.frame(res.pam$silinfo$widths)
 silPAM$country=row.names(silPAM)
@@ -333,19 +185,19 @@ Exploremos el promedio de cada cluster:
 aggregate(.~ pam, data=dataClus,mean)
 ```
 
-El número asigando al cluster no tiene significado necesariamente, por lo que recomiendo dárselo. En este caso las etiquetas ascienden al igual que el promedio, por lo que no es necesario recodificar la etiqueta.
+El número asignado al cluster no tiene significado necesariamente, por lo que recomiendo hacer cálculos para dárselo. En este caso, las etiquetas ascienden al igual que el promedio, por lo que no es necesario recodificar la etiqueta.
 
-Antes de continuar, guardemos la columna de PAM en la data integrada, y eliminemosla de __dataClus__.
+Antes de continuar, guardemos la columna de PAM en la data integrada, y eliminemos la de __dataClus__.
 
 ```{r}
-idhdemo$pamIDHpoor=idhdemo$Pais%in%poorPAM
+idhdemo$pamIDHpoor=idhdemo$country%in%poorPAM
 idhdemo$pamIDH=as.ordered(dataClus$pam)
 dataClus$pam=NULL
 ```
 
 
 
-## <font color="blue">Estrategia Jerarquica</font>
+## <font color="blue">Estrategia Jerárquica</font>
 
 La jerarquización busca clusterizar por etapas, hasta que todas las posibilidades de clusterizacion sean visible. Este enfoque tiene dos familias de algoritmos:
 
@@ -441,7 +293,7 @@ aggregate(.~ agnes, data=dataClus,mean)
 Estas etiquetas no necesitan recodificación tampoco. Guardemos la columna de AGNES en la data integrada, y eliminemosla de __dataClus__.
 
 ```{r}
-idhdemo$agnesIDHpoor=idhdemo$Pais%in%poorAGNES
+idhdemo$agnesIDHpoor=idhdemo$country%in%poorAGNES
 idhdemo$agnesIDH=as.ordered(dataClus$agnes)
 dataClus$agnes=NULL
 ```
@@ -525,7 +377,7 @@ Aquí vemos que las etiquetas no muestran un orden. Este sería el orden:
 
 ```{r}
 original=aggregate(.~ diana, data=dataClus,mean)
-original[order(original$EsperanzaVida),]
+original[order(original$hdiLife),]
 ```
 
 Esas posiciones hay que usarlas para recodificar:
@@ -538,7 +390,7 @@ dataClus$diana=dplyr::recode(dataClus$diana, `1` = 1, `4`=2,`2`=3,`3`=4)
 Guardemos la columna de DIANA en la data integrada, y eliminemosla de __dataClus__.
 
 ```{r}
-idhdemo$dianaIDHpoor=idhdemo$Pais%in%poorDIANA
+idhdemo$dianaIDHpoor=idhdemo$country%in%poorDIANA
 idhdemo$dianaIDH=as.ordered(dataClus$diana)
 dataClus$diana=NULL
 ```
@@ -579,7 +431,7 @@ Coloreemos el mapa anterior segun el cluster al que corresponden.
 ```{r pamColor, warning=FALSE, message=FALSE,fig.height=6, fig.cap="Conglomerados PAM en Mapa Bidimensonal de países"}
 
 # solo paises mal clusterizados
-PAMlabels=ifelse(idhdemo$pamIDHpoor,idhdemo$Pais,'')
+PAMlabels=ifelse(idhdemo$pamIDHpoor,idhdemo$country,'')
 
 #base
 base= ggplot(idhdemo,aes(x=dim1, y=dim2))  +
@@ -599,7 +451,7 @@ pamPlot + geom_text_repel(size=4,
 
 ```{r agnColor, warning=FALSE, message=FALSE,fig.height=6, fig.cap="Conglomerados AGNES en Mapa Bidimensonal de países"}
 # solo paises mal clusterizados
-AGNESlabels=ifelse(idhdemo$agnesIDHpoor,idhdemo$Pais,'')
+AGNESlabels=ifelse(idhdemo$agnesIDHpoor,idhdemo$country,'')
 
 agnesPlot=base + geom_point(size=3, 
                             aes(color=as.factor(agnesIDH))) +
@@ -616,7 +468,7 @@ agnesPlot + geom_text_repel(size=4,
 ```{r diaColor, warning=FALSE, message=FALSE,fig.height=6, fig.cap="Conglomerados DIANA en Mapa Bidimensonal de países"}
 
 # solo paises mal clusterizados
-DIANAlabels=ifelse(idhdemo$dianaIDHpoor,idhdemo$Pais,'')
+DIANAlabels=ifelse(idhdemo$dianaIDHpoor,idhdemo$country,'')
 
 dianaPlot=base + geom_point(size=3,
                             aes(color=dianaIDH)) + 
