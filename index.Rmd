@@ -41,6 +41,7 @@ ____
 
 
 ```{r klippy, echo=FALSE, include=TRUE}
+#1
 klippy::klippy(position = c('top', 'right'))
 ```
 
